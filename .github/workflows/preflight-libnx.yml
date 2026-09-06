@@ -1,0 +1,53 @@
+name: preflight (libnx)
+on: [push, workflow_dispatch]
+
+jobs:
+  # The buildbot's own image, if it can be pulled anonymously. This is the one
+  # that ships CMake 3.18.4 and fails configure without the fetch below.
+  buildbot-image:
+    runs-on: ubuntu-24.04
+    container: git.libretro.com:5050/libretro-infrastructure/libretro-build-libnx-devkitpro:v4-10-0
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: what the image ships
+        run: cmake --version; curl --version | head -n1
+      - name: cmake 3.31.6, the way the job does it
+        run: |
+          CMAKE_VER=3.31.6
+          curl -sSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-x86_64.tar.gz" | tar -xz -C /tmp
+          echo "/tmp/cmake-${CMAKE_VER}-linux-x86_64/bin" >> $GITHUB_PATH
+      - name: configure and build, as the job does
+        run: |
+          cmake --version
+          cmake -DLIBRETRO=ON -DUSE_OPENMP=OFF . -Bbuild/libnx -DCMAKE_BUILD_TYPE=Release \
+                -DLIBRETRO_STATIC=ON -DLIBRETRO_SUFFIX=_libnx \
+                -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake -DNSWITCH=ON \
+                -DCFLAGS=-DHAVE_LIBNX=1 -DCXXFLAGS=-DHAVE_LIBNX=1
+          cmake --build build/libnx --target combined --config Release -- -j $(nproc)
+      - run: ls -la build/libnx/flycast_libretro_libnx.a
+
+  # Same thing in devkitPro's own image, in case the registry above is not
+  # anonymously pullable from here.
+  devkitpro-image:
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkita64:latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: what the image ships
+        run: cmake --version
+      - name: cmake 3.31.6, the way the job does it
+        run: |
+          CMAKE_VER=3.31.6
+          curl -sSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-x86_64.tar.gz" | tar -xz -C /tmp
+          echo "/tmp/cmake-${CMAKE_VER}-linux-x86_64/bin" >> $GITHUB_PATH
+      - name: configure and build, as the job does
+        run: |
+          cmake --version
+          cmake -DLIBRETRO=ON -DUSE_OPENMP=OFF . -Bbuild/libnx -DCMAKE_BUILD_TYPE=Release \
+                -DLIBRETRO_STATIC=ON -DLIBRETRO_SUFFIX=_libnx \
+                -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake -DNSWITCH=ON \
+                -DCFLAGS=-DHAVE_LIBNX=1 -DCXXFLAGS=-DHAVE_LIBNX=1
+          cmake --build build/libnx --target combined --config Release -- -j $(nproc)
+      - run: ls -la build/libnx/flycast_libretro_libnx.a
