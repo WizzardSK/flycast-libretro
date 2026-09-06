@@ -1,0 +1,26 @@
+name: preflight (libnx combined)
+on: [push, workflow_dispatch]
+
+jobs:
+  combined:
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkita64:latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: build the combined archive, as the buildbot job does
+        run: |
+          cmake -DLIBRETRO=ON -DUSE_OPENMP=OFF . -Bbuild/libnx -DCMAKE_BUILD_TYPE=Release \
+                -DLIBRETRO_STATIC=ON -DLIBRETRO_SUFFIX=_libnx \
+                -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake -DNSWITCH=ON \
+                -DCFLAGS=-DHAVE_LIBNX=1 -DCXXFLAGS=-DHAVE_LIBNX=1
+          cmake --build build/libnx --target combined --config Release -- -j $(nproc)
+      # what RetroArch's link came up short of last night
+      - name: the archive defines what the RetroArch link needs
+        run: |
+          A=build/libnx/flycast_libretro_libnx.a
+          ls -la $A
+          /opt/devkitpro/devkitA64/bin/aarch64-none-elf-nm --defined-only $A > syms.txt
+          grep -q ' T ZSTD_isError' syms.txt
+          grep -q 'set_log_error_callback' syms.txt
+          echo "zstd and tinygettext are in"
